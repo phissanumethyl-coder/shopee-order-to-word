@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shopee Order to Word - ผ้าม่าน</title>
+    <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { margin: 0; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        h1 { color: white; text-align: center; margin-bottom: 10px; }
+        .subtitle { color: rgba(255,255,255,0.9); text-align: center; margin-bottom: 30px; }
+        .card { background: white; border-radius: 16px; padding: 24px; margin-bottom: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); }
+        .card h2 { margin-top: 0; color: #333; border-bottom: 2px solid #667eea; padding-bottom: 10px; }
+        textarea { width: 100%; height: 200px; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; resize: vertical; }
+        textarea:focus { outline: none; border-color: #667eea; }
+        input[type="text"], input[type="date"] { padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; }
+        input:focus { outline: none; border-color: #667eea; }
+        .btn { padding: 12px 24px; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; margin-right: 10px; margin-bottom: 10px; }
+        .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .btn-success { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white; }
+        .btn-danger { background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%); color: white; }
+        .btn-secondary { background: #6c757d; color: white; }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(0,0,0,0.2); }
+        .order-item { background: #f8f9fa; border-radius: 12px; padding: 16px; margin-bottom: 12px; border-left: 4px solid #667eea; }
+        .order-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .order-id { font-weight: 700; color: #667eea; }
+        .order-details span { display: inline-block; background: #e9ecef; padding: 2px 8px; border-radius: 4px; margin: 2px 4px 2px 0; font-size: 14px; }
+        .product-item { background: #e3f2fd; padding: 8px 12px; border-radius: 6px; margin-top: 8px; font-size: 13px; }
+        .product-item .cost { color: #e65100; font-weight: bold; }
+        .summary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 12px; margin-top: 20px; }
+        .row { display: flex; gap: 20px; flex-wrap: wrap; }
+        .col { flex: 1; min-width: 300px; }
+        .instructions { background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px; padding: 15px; margin-bottom: 20px; }
+        .instructions h4 { margin-top: 0; color: #856404; }
+        .instructions ol { margin-bottom: 0; color: #856404; }
+        .parsed-preview { background: #e8f5e9; border: 1px solid #4caf50; border-radius: 8px; padding: 15px; margin-top: 15px; display: none; }
+        .parsed-preview.show { display: block; }
+        .parsed-preview h4 { margin-top: 0; color: #2e7d32; }
+        .error-msg { background: #ffebee; border: 1px solid #f44336; border-radius: 8px; padding: 15px; margin-top: 15px; color: #c62828; display: none; }
+        .error-msg.show { display: block; }
+        .header-settings { display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end; }
+        .input-group { margin-bottom: 15px; }
+        .input-group label { display: block; margin-bottom: 8px; font-weight: 600; color: #555; }
+        .cost-summary { background: #fff3e0; border: 2px solid #ff9800; border-radius: 8px; padding: 15px; margin-top: 10px; }
+        .cost-summary h4 { margin: 0 0 10px 0; color: #e65100; }
+        .profit { color: #2e7d32; font-weight: bold; font-size: 18px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏠 Shopee Order to Word</h1>
+        <p class="subtitle">สร้างใบสั่งงานผ้าม่านจาก Shopee Seller Center (พร้อมคำนวณต้นทุน)</p>
+        <div class="card">
+            <h2>📋 ตั้งค่าเอกสาร</h2>
+            <div class="header-settings">
+                <div class="input-group"><label>ชื่อเอกสาร</label><input type="text" id="docTitle" value="SALE_1" style="width: 150px;"></div>
+                <div class="input-group"><label>วันที่ออเดอร์</label><input type="date" id="orderDate" style="width: 180px;"></div>
+                <div class="input-group"><label>วันที่จัดส่ง</label><input type="date" id="deliveryDate" style="width: 180px;"></div>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col">
+                <div class="card">
+                    <h2>📥 วาง Order จาก Shopee</h2>
+                    <div class="instructions"><h4>วิธีใช้งาน:</h4><ol><li>เปิดหน้า Order ใน Shopee Seller Center</li><li>กด Ctrl+A เพื่อเลือกทั้งหมด แล้ว Ctrl+C</li><li>มาวางในช่องด้านล่าง</li><li>กดปุ่ม "เพิ่ม Order"</li></ol></div>
+                    <div class="input-group"><label>วาง Order ที่นี่:</label><textarea id="orderInput" placeholder="Copy ข้อมูลจากหน้า Order ใน Shopee มาวางที่นี่..."></textarea></div>
+                    <div class="parsed-preview" id="parsedPreview"><h4>✅ ข้อมูลที่อ่านได้:</h4><div id="previewContent"></div></div>
+                    <div class="error-msg" id="errorMsg"></div>
+                    <button class="btn btn-primary" onclick="parseAndPreview()">🔍 ตรวจสอบข้อมูล</button>
+                    <button class="btn btn-success" onclick="addOrder()">➕ เพิ่ม Order</button>
+                    <button class="btn btn-secondary" onclick="clearInput()">🗑️ ล้าง</button>
+                </div>
+            </div>
+            <div class="col">
+                <div class="card">
+                    <h2>📦 รายการ Order ที่เพิ่มแล้ว (<span id="orderCount">0</span>)</h2>
+                    <div id="orderList"><p style="color: #999; text-align: center;">ยังไม่มี Order</p></div>
+                    <div class="summary" id="summary" style="display: none;"><h3 style="margin-top:0">📊 สรุป</h3><p>จำนวน Order: <strong id="totalOrders">0</strong></p><p>จำนวนผ้าม่านรวม: <strong id="totalItems">0</strong> ผืน</p><p>ยอดรวมทั้งหมด: <strong id="totalPrice">0</strong> บาท</p></div>
+                    <div class="cost-summary" id="costSummary" style="display: none;"><h4>💰 สรุปต้นทุนและกำไร</h4><p>ต้นทุนรวม: <strong id="totalCost">0</strong> บาท</p><p>กำไรโดยประมาณ: <span class="profit" id="totalProfit">0</span> บาท</p></div>
+                    <div style="margin-top: 20px;"><button class="btn btn-success" onclick="generateWord()" id="generateBtn" disabled>📄 สร้างไฟล์ Word</button><button class="btn btn-danger" onclick="clearAllOrders()">🗑️ ล้างทั้งหมด</button></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        document.getElementById('deliveryDate').valueAsDate = new Date();
+        document.getElementById('orderDate').valueAsDate = new Date();
+        let orders = [];
+        let currentParsedOrder = null;
+
+        const pricePatterned = [
+            {minW:1.30,maxW:1.30,minH:0.01,maxH:1.60,cost:140.44},{minW:1.30,maxW:1.30,minH:1.80,maxH:1.80,cost:151.67},{minW:1.30,maxW:1.30,minH:2.00,maxH:2.20,cost:191.00},{minW:1.30,maxW:1.30,minH:2.40,maxH:2.60,cost:202.23},
+            {minW:1.40,maxW:1.40,minH:0.01,maxH:2.40,cost:207.85},{minW:1.40,maxW:1.40,minH:2.60,maxH:2.60,cost:219.08},{minW:1.50,maxW:1.50,minH:0.01,maxH:2.40,cost:235.94},{minW:1.50,maxW:1.50,minH:2.60,maxH:2.60,cost:247.17},
+            {minW:1.60,maxW:1.60,minH:0.01,maxH:2.60,cost:258.41},{minW:1.70,maxW:1.70,minH:0.01,maxH:2.60,cost:269.64},{minW:1.80,maxW:1.80,minH:0.01,maxH:2.60,cost:286.49},{minW:2.00,maxW:2.00,minH:0.01,maxH:2.40,cost:308.96},
+            {minW:2.00,maxW:2.00,minH:2.60,maxH:2.60,cost:314.58},{minW:2.20,maxW:2.20,minH:0.01,maxH:2.60,cost:320.20},{minW:2.30,maxW:2.30,minH:0.01,maxH:2.60,cost:342.67},{minW:2.40,maxW:2.40,minH:0.01,maxH:2.60,cost:353.90},
+            {minW:2.50,maxW:2.50,minH:0.01,maxH:2.60,cost:376.37},{minW:2.60,maxW:2.60,minH:0.01,maxH:2.60,cost:393.23},{minW:2.80,maxW:2.80,minH:0.01,maxH:2.60,cost:460.64},{minW:3.00,maxW:3.00,minH:0.01,maxH:2.40,cost:471.87},{minW:3.00,maxW:3.00,minH:2.60,maxH:2.60,cost:483.11}
+        ];
+        const priceSolid = [
+            {minW:1.30,maxW:1.30,minH:0.01,maxH:1.60,cost:151.67},{minW:1.30,maxW:1.30,minH:1.80,maxH:1.80,cost:162.91},{minW:1.30,maxW:1.30,minH:2.00,maxH:2.20,cost:207.85},{minW:1.30,maxW:1.30,minH:2.40,maxH:2.60,cost:219.08},
+            {minW:1.40,maxW:1.40,minH:0.01,maxH:2.40,cost:219.08},{minW:1.40,maxW:1.40,minH:2.60,maxH:2.60,cost:230.32},{minW:1.50,maxW:1.50,minH:0.01,maxH:2.40,cost:247.17},{minW:1.50,maxW:1.50,minH:2.60,maxH:2.60,cost:258.41},
+            {minW:1.60,maxW:1.60,minH:0.01,maxH:2.60,cost:269.64},{minW:1.70,maxW:1.70,minH:0.01,maxH:2.60,cost:275.26},{minW:1.80,maxW:1.80,minH:0.01,maxH:2.60,cost:297.73},{minW:2.00,maxW:2.00,minH:0.01,maxH:2.40,cost:320.20},
+            {minW:2.00,maxW:2.00,minH:2.60,maxH:2.60,cost:331.43},{minW:2.20,maxW:2.20,minH:0.01,maxH:2.60,cost:331.43},{minW:2.30,maxW:2.30,minH:0.01,maxH:2.60,cost:353.90},{minW:2.40,maxW:2.40,minH:0.01,maxH:2.60,cost:365.14},
+            {minW:2.50,maxW:2.50,minH:0.01,maxH:2.60,cost:393.23},{minW:2.60,maxW:2.60,minH:0.01,maxH:2.60,cost:410.08},{minW:2.80,maxW:2.80,minH:0.01,maxH:2.60,cost:471.87},{minW:3.00,maxW:3.00,minH:0.01,maxH:2.60,cost:494.34}
+        ];
+        const priceSheer = [
+            {minW:1.30,maxW:1.30,minH:0.01,maxH:1.60,cost:129.20},{minW:1.30,maxW:1.30,minH:1.80,maxH:1.80,cost:134.82},{minW:1.30,maxW:1.30,minH:2.00,maxH:2.20,cost:168.53},{minW:1.30,maxW:1.30,minH:2.40,maxH:2.60,cost:174.14},
+            {minW:1.40,maxW:1.40,minH:0.01,maxH:2.40,cost:168.53},{minW:1.40,maxW:1.40,minH:2.60,maxH:2.60,cost:168.53},{minW:1.50,maxW:1.50,minH:0.01,maxH:2.40,cost:179.76},{minW:1.50,maxW:1.50,minH:2.60,maxH:2.60,cost:185.38},
+            {minW:1.60,maxW:1.60,minH:0.01,maxH:2.40,cost:196.61},{minW:1.60,maxW:1.60,minH:2.60,maxH:2.60,cost:202.23},{minW:2.00,maxW:2.00,minH:0.01,maxH:2.40,cost:235.94},{minW:2.00,maxW:2.00,minH:2.60,maxH:2.60,cost:247.17},
+            {minW:2.50,maxW:2.50,minH:0.01,maxH:2.60,cost:280.88},{minW:3.00,maxW:3.00,minH:0.01,maxH:2.60,cost:337.05}
+        ];
+        // ตารางราคาขนาดใหญ่ ผ้าพื้น (กว้าง >= 2.70 และ สูง > 2.60)
+        const priceOversizedSolid = [
+            {minW:2.70,maxW:2.80,minH:2.63,maxH:3.20,cost:614.34},{minW:2.90,maxW:3.00,minH:2.63,maxH:3.20,cost:654.34},{minW:3.10,maxW:3.20,minH:2.63,maxH:3.20,cost:694.34},{minW:3.30,maxW:3.40,minH:2.63,maxH:3.20,cost:734.34},
+            {minW:3.50,maxW:3.60,minH:2.63,maxH:3.20,cost:774.34},{minW:3.70,maxW:3.80,minH:2.63,maxH:3.20,cost:814.34},{minW:3.90,maxW:4.00,minH:2.63,maxH:3.20,cost:854.34},{minW:4.10,maxW:4.20,minH:2.63,maxH:3.20,cost:894.34},
+            {minW:4.30,maxW:4.40,minH:2.63,maxH:3.20,cost:934.34},{minW:4.50,maxW:4.60,minH:2.63,maxH:3.20,cost:974.34},{minW:4.70,maxW:4.80,minH:2.63,maxH:3.20,cost:1014.34},{minW:4.90,maxW:5.00,minH:2.63,maxH:3.20,cost:1054.34},
+            {minW:5.10,maxW:5.20,minH:2.63,maxH:3.20,cost:1094.34},{minW:5.30,maxW:5.40,minH:2.63,maxH:3.20,cost:1134.34}
+        ];
+        // ตารางราคาขนาดใหญ่ ผ้าลาย + ผ้าโปร่ง (กว้าง >= 2.70 และ สูง > 2.60)
+        const priceOversizedPatterned = [
+            {minW:2.70,maxW:2.80,minH:2.63,maxH:3.20,cost:580.64},{minW:2.90,maxW:3.00,minH:2.63,maxH:3.20,cost:620.64},{minW:3.10,maxW:3.20,minH:2.63,maxH:3.20,cost:660.64},{minW:3.30,maxW:3.40,minH:2.63,maxH:3.20,cost:700.64},
+            {minW:3.50,maxW:3.60,minH:2.63,maxH:3.20,cost:740.64},{minW:3.70,maxW:3.80,minH:2.63,maxH:3.20,cost:780.64},{minW:3.90,maxW:4.00,minH:2.63,maxH:3.20,cost:820.64},{minW:4.10,maxW:4.20,minH:2.63,maxH:3.20,cost:860.64},
+            {minW:4.30,maxW:4.40,minH:2.63,maxH:3.20,cost:900.64},{minW:4.50,maxW:4.60,minH:2.63,maxH:3.20,cost:940.64},{minW:4.70,maxW:4.80,minH:2.63,maxH:3.20,cost:980.64},{minW:4.90,maxW:5.00,minH:2.63,maxH:3.20,cost:1020.64},
+            {minW:5.10,maxW:5.20,minH:2.63,maxH:3.20,cost:1060.64},{minW:5.30,maxW:5.40,minH:2.63,maxH:3.20,cost:1100.64}
+        ];
+        const solidCodes = ['สีเทาเข้ม','สีเทาอ่อน','สีครีม','เทาเข้ม','เทาอ่อน','ครีม','A4','A6','A7','A8','A9','A10','A18','828','828-1','828-3','828-6'];
+        const sheerCodes = ['733','734'];
+
+        function getFabricType(c){
+            if(!c)return'patterned';
+            const code=c.trim();
+            
+            // ตรวจสอบผ้าโปร่งก่อน (733, 734)
+            for(const s of sheerCodes)if(code.includes(s))return'sheer';
+            
+            // ตรวจสอบว่ามีรหัสตัวเลข 3 หลักหรือไม่ (เช่น 863, 877, 858)
+            // ถ้ามีรหัสตัวเลข = ผ้าลาย (ยกเว้น 733, 734, 828)
+            const numMatch = code.match(/\d{3,}/);
+            if(numMatch){
+                const num = numMatch[0];
+                // ถ้าเป็น 733, 734 = ผ้าโปร่ง (ตรวจไปแล้วด้านบน)
+                // ถ้าเป็น 828 = ผ้าพื้น
+                if(num.startsWith('828'))return'solid';
+                // ที่เหลือ = ผ้าลาย
+                return'patterned';
+            }
+            
+            // ตรวจสอบผ้าพื้น (ไม่มีรหัสตัวเลข)
+            for(const s of solidCodes)if(code.toLowerCase().includes(s.toLowerCase()))return'solid';
+            if(/^A\d+/i.test(code))return'solid';
+            
+            return'patterned';
+        }
+        
+        function findBaseCost(t,w,h){
+            let bc=0,bw=0,bh=0;
+            // ถ้ากว้าง < 1.30 ให้ใช้ราคาเดียวกับ 1.30
+            const effectiveW = Math.max(w, 1.30);
+            for(const r of t){
+                if(effectiveW>=r.minW && r.minW<=effectiveW){
+                    const effectiveH = Math.min(h, 2.60);
+                    if(effectiveH>=r.minH && effectiveH<=r.maxH){
+                        bc=r.cost;bw=r.minW;bh=r.maxH;
+                    }
+                }
+            }
+            if(bc===0){
+                let md=Infinity;
+                for(const r of t){
+                    const d=Math.abs(effectiveW-r.minW);
+                    if(d<md){md=d;bc=r.cost;bw=r.minW;bh=r.maxH;}
+                }
+            }
+            return{baseCost:bc,baseWidth:bw,baseHeight:bh};
+        }
+        
+        function calculateCost(col,sz){
+            if(!sz)return 0;
+            const p=sz.split('*');
+            if(p.length!==2)return 0;
+            const w=parseFloat(p[0]),h=parseFloat(p[1]);
+            if(isNaN(w)||isNaN(h))return 0;
+            
+            const ft=getFabricType(col);
+            
+            // ถ้าขนาดใหญ่ (กว้าง >= 2.70 และ สูง > 2.60)
+            if(w>=2.70 && h>2.60){
+                // เลือกตาราง Oversized ตามประเภทผ้า
+                const priceOversized = (ft === 'solid') ? priceOversizedSolid : priceOversizedPatterned;
+                
+                for(const r of priceOversized){
+                    if(w>=r.minW&&w<=r.maxW&&h>=r.minH&&h<=r.maxH)return r.cost;
+                }
+                let cc=0,md=Infinity;
+                for(const r of priceOversized){
+                    const d=Math.abs(w-(r.minW+r.maxW)/2);
+                    if(d<md&&h>=r.minH&&h<=r.maxH){md=d;cc=r.cost;}
+                }
+                if(cc>0)return cc;
+            }
+            
+            // ขนาดปกติ
+            let pt;
+            switch(ft){
+                case'sheer':pt=priceSheer;break;
+                case'solid':pt=priceSolid;break;
+                default:pt=pricePatterned;
+            }
+            
+            const{baseCost:bc,baseWidth:bw,baseHeight:bh}=findBaseCost(pt,w,h);
+            if(bc===0)return 0;
+            
+            let extraCost=0;
+            extraCost+=Math.max(0,Math.round((w-bw)*100));
+            if(h>bh){
+                extraCost+=Math.round((h-bh)*100);
+            }
+            return bc+extraCost;
+        }
+
+        function parseOrderText(text) {
+            const order = {orderId:'',orderDate:'',customerName:'',address:'',username:'',products:[],totalPayment:0,totalCost:0};
+            
+            // ดึง Order ID
+            const orderIdMatch = text.match(/หมายเลขคำสั่งซื้อ\s*[\n\r]*\s*(\w+)/);
+            if (orderIdMatch) order.orderId = orderIdMatch[1];
+            
+            // ดึงวันที่จาก Order ID
+            if (order.orderId && order.orderId.length >= 6) {
+                const d = order.orderId.substring(0, 6);
+                order.orderDate = parseInt(d.substring(0,2)) + '/' + parseInt(d.substring(2,4)) + '/' + (2000 + parseInt(d.substring(4,6)) + 543);
+            }
+            
+            // ดึงที่อยู่
+            const addressMatch = text.match(/ที่อยู่ในการจัดส่ง\s*[\n\r]+([^\n\r]+)[\n\r]+([^\n\r]+)/);
+            if (addressMatch) {
+                order.customerName = addressMatch[1].trim();
+                order.address = addressMatch[2].trim();
+            }
+            
+            // ดึง Username
+            const lines = text.split(/[\n\r]+/);
+            for (let i = 0; i < lines.length; i++) {
+                if (lines[i].includes('รายละเอียดการชำระเงิน')) {
+                    for (let j = i - 1; j >= Math.max(0, i - 5); j--) {
+                        const line = lines[j].trim();
+                        if (/^[a-zA-Z0-9][a-zA-Z0-9_.]*$/.test(line) && line.length >= 2 && line.length <= 100 && !line.match(/^\d+$/)) {
+                            order.username = '@' + line;
+                            break;
+                        }
+                    }
+                    break;
+                }
+            }
+            if (!order.username) {
+                const usernameMatch = text.match(/\b([a-zA-Z0-9][a-zA-Z0-9]*[_\.][a-zA-Z0-9_.]+)\b/);
+                if (usernameMatch) order.username = '@' + usernameMatch[1];
+            }
+            
+            // ดึงสินค้า - วิธีใหม่: หาตำแหน่ง "ตัวเลือกสินค้า" แล้วดึงจำนวนจากบรรทัดถัดไป
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
+                
+                if (line.startsWith('ตัวเลือกสินค้า')) {
+                    const product = {color: '', size: '', quantity: 1, cost: 0};
+                    
+                    // ดึงสี
+                    const colorPatterns = [/สีเทาเข้ม/i,/สีเทาอ่อน/i,/สีครีม/i,/เทาเข้ม\s*\d*/i,/เทาอ่อน/i,/ครีม/i,
+                        /ผ้าโปร่ง\s*\d*/i,/ผ้าม่านสีครีม/i,/ขาว\s*\d*/i,/ดำ\s*\d*/i,/น้ำตาล\s*\d*/i,/เขียว\s*\d*/i,
+                        /น้ำเงิน\s*\d*/i,/ฟ้า\s*\d*/i,/ชมพู\s*\d*/i,/ม่วง\s*\d*/i,/แดง\s*\d*/i,/เหลือง\s*\d*/i,/ส้ม\s*\d*/i,
+                        /เงิน\s*\d*/i,/ทอง\s*\d*/i,/เบจ\s*\d*/i,/กากี\s*\d*/i,/เทา\s*\d*/i,/บลอนด์\s*\d*/i,/A\d+/i,/828[-]?\d*/i,/\d{3,}/];
+                    for (const pt of colorPatterns) {
+                        const cm = line.match(pt);
+                        if (cm) { product.color = cm[0].trim(); break; }
+                    }
+                    
+                    // ดึงขนาด
+                    const sizeMatch = line.match(/กว้าง\s*([\d.]+)\s*สูง\s*([\d.]+)/);
+                    if (sizeMatch) product.size = sizeMatch[1] + '*' + sizeMatch[2];
+                    
+                    // ดึงจำนวน - ข้ามบรรทัด "เลข SKU" ถ้ามี
+                    let nextLine = i + 1;
+                    if (nextLine < lines.length && lines[nextLine].trim().startsWith('เลข SKU')) {
+                        nextLine++; // ข้ามบรรทัด SKU
+                    }
+                    
+                    // บรรทัดถัดไป: ราคาต่อชิ้น, แล้วจำนวน
+                    if (nextLine + 1 < lines.length) {
+                        const priceLine = lines[nextLine].trim();
+                        const qtyLine = lines[nextLine + 1].trim();
+                        
+                        // ตรวจสอบว่าเป็นตัวเลข (ราคาอาจมี , เช่น 1,663)
+                        if (/^[\d,]+$/.test(priceLine) && /^\d+$/.test(qtyLine)) {
+                            product.quantity = parseInt(qtyLine);
+                        }
+                    }
+                    
+                    // คำนวณต้นทุน
+                    product.cost = calculateCost(product.color, product.size);
+                    order.products.push(product);
+                }
+            }
+            
+            // ดึงยอดชำระ
+            let productPrice = 0, shippingFee = 0;
+            const buyerSection = text.match(/การชำระเงินของผู้ซื้อ[\s\S]*?รวมค่าสินค้า\s*[฿B]?([\d,]+)/);
+            if (buyerSection) productPrice = parseInt(buyerSection[1].replace(/,/g, ''));
+            const buyerShipping = text.match(/การชำระเงินของผู้ซื้อ[\s\S]*?ค่าจัดส่ง\s*[฿B]?([\d,]+)/);
+            if (buyerShipping) shippingFee = parseInt(buyerShipping[1].replace(/,/g, ''));
+            order.totalPayment = productPrice + shippingFee;
+            
+            // คำนวณต้นทุนรวม
+            order.totalCost = order.products.reduce((sum, p) => sum + (p.cost * p.quantity), 0);
+            
+            if (order.products.length === 0) {
+                order.products.push({color: '', size: '', quantity: 1, cost: 0});
+            }
+            
+            return order;
+        }
+
+        function parseAndPreview(){const inp=document.getElementById('orderInput').value.trim(),prev=document.getElementById('parsedPreview'),pc=document.getElementById('previewContent'),em=document.getElementById('errorMsg');if(!inp){em.textContent='❌ กรุณาวางข้อมูล Order ก่อน';em.classList.add('show');prev.classList.remove('show');return;}em.classList.remove('show');const o=parseOrderText(inp);currentParsedOrder=o;const tq=o.products.reduce((s,p)=>s+p.quantity,0);let h='<p><strong>เลข Order:</strong> '+(o.orderId||'❌ ไม่พบ')+'</p><p><strong>วันที่:</strong> '+(o.orderDate||'❌ ไม่พบ')+'</p><p><strong>ชื่อลูกค้า:</strong> '+(o.customerName||'❌ ไม่พบ')+'</p><p><strong>ที่อยู่:</strong> '+(o.address||'❌ ไม่พบ')+'</p><p><strong>Username:</strong> '+(o.username||'❌ ไม่พบ')+'</p><p><strong>จำนวนสินค้า:</strong> '+o.products.length+' รายการ (รวม '+tq+' ผืน)</p><hr><p><strong>รายการสินค้า:</strong></p>';o.products.forEach((p,i)=>{const ft=getFabricType(p.color),fl=ft==='sheer'?'🔵 ผ้าโปร่ง':(ft==='solid'?'🟢 ผ้าพื้น':'🟠 ผ้ามีลาย');h+='<div style="background:#f5f5f5;padding:8px;margin:5px 0;border-radius:4px;"><strong>#'+(i+1)+'</strong> '+fl+'<br>สี: '+(p.color||'-')+', ขนาด: '+(p.size||'-')+', จำนวน: '+p.quantity+'<br><span style="color:#e65100;font-weight:bold;">💰 ต้นทุน: '+p.cost.toFixed(2)+' บาท/ผืน (รวม '+(p.cost*p.quantity).toFixed(2)+' บาท)</span></div>';});h+='<hr><p><strong>ยอดชำระ:</strong> '+o.totalPayment.toLocaleString()+' บาท</p><p><strong>ต้นทุนรวม:</strong> <span style="color:#e65100;">'+o.totalCost.toFixed(2)+' บาท</span></p><p><strong>กำไรโดยประมาณ:</strong> <span style="color:#2e7d32;font-weight:bold;">'+(o.totalPayment-o.totalCost).toFixed(2)+' บาท</span></p>';pc.innerHTML=h;prev.classList.add('show');}
+        function addOrder(){if(!currentParsedOrder){parseAndPreview();if(!currentParsedOrder)return;}if(orders.find(o=>o.orderId===currentParsedOrder.orderId)){alert('Order นี้เพิ่มไปแล้ว!');return;}orders.push(JSON.parse(JSON.stringify(currentParsedOrder)));updateOrderList();clearInput();document.getElementById('generateBtn').disabled=false;}
+        function removeOrder(i){orders.splice(i,1);updateOrderList();if(orders.length===0)document.getElementById('generateBtn').disabled=true;}
+        function updateOrderList(){const le=document.getElementById('orderList'),ce=document.getElementById('orderCount'),se=document.getElementById('summary'),cse=document.getElementById('costSummary');ce.textContent=orders.length;if(orders.length===0){le.innerHTML='<p style="color: #999; text-align: center;">ยังไม่มี Order</p>';se.style.display='none';cse.style.display='none';return;}let h='',ti=0,tp=0,tc=0;orders.forEach((o,i)=>{const oq=o.products.reduce((s,p)=>s+p.quantity,0);ti+=oq;tp+=o.totalPayment;tc+=o.totalCost;h+='<div class="order-item"><div class="order-header"><span class="order-id">#'+(i+1)+' - '+o.orderId+'</span><button class="btn btn-danger" style="padding:6px 12px;font-size:12px" onclick="removeOrder('+i+')">✕ ลบ</button></div><div class="order-details"><span>📅 '+o.orderDate+'</span><span>👤 '+o.username+'</span><span>🔢 '+oq+' ผืน</span><span>💰 '+o.totalPayment.toLocaleString()+' บาท</span></div>';o.products.forEach((p,pi)=>{h+='<div class="product-item">สินค้า '+(pi+1)+': '+(p.color||'-')+' | '+(p.size||'-')+' | '+p.quantity+' ผืน <span class="cost">(ต้นทุน '+(p.cost*p.quantity).toFixed(2)+' บาท)</span></div>';});h+='</div>';});le.innerHTML=h;document.getElementById('totalOrders').textContent=orders.length;document.getElementById('totalItems').textContent=ti;document.getElementById('totalPrice').textContent=tp.toLocaleString();se.style.display='block';document.getElementById('totalCost').textContent=tc.toFixed(2);document.getElementById('totalProfit').textContent=(tp-tc).toFixed(2);cse.style.display='block';}
+        function clearInput(){document.getElementById('orderInput').value='';document.getElementById('parsedPreview').classList.remove('show');document.getElementById('errorMsg').classList.remove('show');currentParsedOrder=null;}
+        function clearAllOrders(){if(orders.length>0&&!confirm('ต้องการลบ Order ทั้งหมดหรือไม่?'))return;orders=[];updateOrderList();document.getElementById('generateBtn').disabled=true;}
+        function generateWord(){if(orders.length===0){alert('กรุณาเพิ่ม Order ก่อน');return;}const dt=document.getElementById('docTitle').value||'SALE',dd=document.getElementById('deliveryDate').value,odi=document.getElementById('orderDate').value;let fdd='';if(dd){const d=new Date(dd);fdd=d.getDate()+'/'+(d.getMonth()+1)+'/'+(d.getFullYear()+543).toString().slice(-2);}let ood='';if(odi){const od=new Date(odi);ood=od.getDate()+'/'+(od.getMonth()+1)+'/'+(od.getFullYear()+543);}let tq=0,tp=0,tc=0,tr='';orders.forEach(o=>{tp+=o.totalPayment;tc+=o.totalCost;let qs=[],cs=[],ss=[],cts=[];o.products.forEach(p=>{tq+=p.quantity;qs.push(p.quantity);cs.push(p.color||'');ss.push(p.size||'');cts.push((p.cost*p.quantity).toFixed(2));});const dod=ood||o.orderDate;tr+='<tr><td style="text-align:center;border:1px solid black;padding:5px;font-size:16pt;vertical-align:top">'+dod+'</td><td style="border:1px solid black;padding:5px;font-size:16pt;vertical-align:top">'+o.orderId+' '+o.customerName+'<br>'+o.address+'<br>'+o.username+'</td><td style="text-align:center;border:1px solid black;padding:5px;font-size:16pt;vertical-align:top">'+qs.join('<br>')+'</td><td style="text-align:center;border:1px solid black;padding:5px;font-size:16pt;vertical-align:top">'+cs.join('<br>')+'</td><td style="text-align:center;border:1px solid black;padding:5px;font-size:16pt;vertical-align:top">'+ss.join('<br>')+'</td><td style="border:1px solid black;padding:5px;font-size:16pt;vertical-align:top"></td><td style="text-align:center;border:1px solid black;padding:5px;font-size:16pt;vertical-align:top">'+cts.join('<br>')+'</td><td style="text-align:center;border:1px solid black;padding:5px;font-size:16pt;vertical-align:top">'+o.totalPayment+'</td></tr>';});const html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="UTF-8"><style>@page{size:landscape;margin:1cm;}@page Section1{size:841.9pt 595.3pt;mso-page-orientation:landscape;margin:1cm;}div.Section1{page:Section1;}body{font-family:"TH SarabunPSK","TH Sarabun New",sans-serif;font-size:16pt;}table{border-collapse:collapse;width:100%;}th{border:1px solid black;padding:5px;text-align:center;font-weight:bold;font-size:16pt;}td{font-family:"TH SarabunPSK","TH Sarabun New",sans-serif;}.title{text-align:left;font-size:18pt;font-weight:bold;margin-bottom:10px;}.highlight{background-color:yellow;}</style><!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom><w:DoNotOptimizeForBrowser/></w:WordDocument></xml><![endif]--></head><body><div class="Section1"><div class="title">'+dt+' <span class="highlight">ของจัดส่งวันที่ '+fdd+'</span></div><table><tr><th style="width:10%">วันที่ออเดอร์</th><th style="width:32%">ชื่อ-ที่อยู่</th><th style="width:6%">จำนวน</th><th style="width:12%">สี</th><th style="width:10%">ขนาด</th><th style="width:6%">เซ็นรับ</th><th style="width:10%">ต้นทุน</th><th style="width:10%">ชำระ</th></tr>'+tr+'<tr><td colspan="2" style="text-align:center;border:1px solid black;padding:5px;font-weight:bold;font-size:16pt">รวม</td><td style="text-align:center;border:1px solid black;padding:5px;font-weight:bold;font-size:16pt">'+tq+'</td><td style="border:1px solid black;padding:5px"></td><td style="border:1px solid black;padding:5px"></td><td style="border:1px solid black;padding:5px"></td><td style="text-align:center;border:1px solid black;padding:5px;font-weight:bold;font-size:16pt">'+tc.toFixed(2)+'</td><td style="text-align:center;border:1px solid black;padding:5px;font-weight:bold;font-size:16pt">'+tp+'</td></tr></table><p style="margin-top:10px;font-size:14pt;">กำไรโดยประมาณ: <strong>'+(tp-tc).toFixed(2)+'</strong> บาท</p></div></body></html>';const blob=new Blob(['\ufeff'+html],{type:'application/msword'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=dt+'_'+fdd.replace(/\//g,'-')+'.doc';document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);}
+    </script>
+</body>
+</html>
