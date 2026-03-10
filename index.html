@@ -133,21 +133,21 @@
             // ตรวจสอบผ้าโปร่งก่อน (733, 734)
             for(const s of sheerCodes)if(code.includes(s))return'sheer';
             
+            // ตรวจสอบ A-series ก่อน (A4, A6, A7, A8, A9, A10, A18) = ผ้าพื้น
+            if(/A\d+/i.test(code))return'solid';
+            
+            // ตรวจสอบ 828 = ผ้าพื้น
+            if(code.includes('828'))return'solid';
+            
             // ตรวจสอบว่ามีรหัสตัวเลข 3 หลักหรือไม่ (เช่น 863, 877, 858)
-            // ถ้ามีรหัสตัวเลข = ผ้าลาย (ยกเว้น 733, 734, 828)
+            // ถ้ามีรหัสตัวเลข = ผ้าลาย
             const numMatch = code.match(/\d{3,}/);
             if(numMatch){
-                const num = numMatch[0];
-                // ถ้าเป็น 733, 734 = ผ้าโปร่ง (ตรวจไปแล้วด้านบน)
-                // ถ้าเป็น 828 = ผ้าพื้น
-                if(num.startsWith('828'))return'solid';
-                // ที่เหลือ = ผ้าลาย
                 return'patterned';
             }
             
             // ตรวจสอบผ้าพื้น (ไม่มีรหัสตัวเลข)
             for(const s of solidCodes)if(code.toLowerCase().includes(s.toLowerCase()))return'solid';
-            if(/^A\d+/i.test(code))return'solid';
             
             return'patterned';
         }
@@ -244,7 +244,8 @@
                 if (lines[i].includes('รายละเอียดการชำระเงิน')) {
                     for (let j = i - 1; j >= Math.max(0, i - 5); j--) {
                         const line = lines[j].trim();
-                        if (/^[a-zA-Z0-9][a-zA-Z0-9_.]*$/.test(line) && line.length >= 2 && line.length <= 100 && !line.match(/^\d+$/)) {
+                        // รองรับ username ที่ขึ้นต้นด้วย _ หรือตัวอักษร/ตัวเลข และมี _ . ได้หลายตัว
+                        if (/^[a-zA-Z0-9_][a-zA-Z0-9_.]*$/.test(line) && line.length >= 2 && line.length <= 100 && !line.match(/^\d+$/)) {
                             order.username = '@' + line;
                             break;
                         }
@@ -253,7 +254,8 @@
                 }
             }
             if (!order.username) {
-                const usernameMatch = text.match(/\b([a-zA-Z0-9][a-zA-Z0-9]*[_\.][a-zA-Z0-9_.]+)\b/);
+                // รองรับ username ที่ขึ้นต้นด้วย _ ได้
+                const usernameMatch = text.match(/\b([a-zA-Z0-9_][a-zA-Z0-9_.]*)\b/);
                 if (usernameMatch) order.username = '@' + usernameMatch[1];
             }
             
