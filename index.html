@@ -332,6 +332,17 @@ function parseLazadaOrder(text) {
     const phoneMatch = text.match(/เบอร์ผู้รับ\s*[\n\r]+([^\n\r]+)/);
     if (phoneMatch) order.username = phoneMatch[1].trim();
     
+    // ฟังก์ชันแปลงสี Lazada
+    function convertLazadaColor(color) {
+        const colorMap = {
+            'เทาเข้ม': 'สีเทาเข้ม',
+            'เทาอ่อน': 'สีเทาอ่อน',
+            'ลายจุด': '733',
+            'ลายเรียบ': '734'
+        };
+        return colorMap[color] || color;
+    }
+    
     // ดึงสินค้า - Lazada format (เก็บทุกรายการก่อน)
     const tempProducts = [];
     const lines = text.split(/[\n\r]+/);
@@ -339,11 +350,12 @@ function parseLazadaOrder(text) {
         const line = lines[i].trim();
         
         let colorMatch = line.match(/(?:โทนสี|Color):\s*([^,]+)/);
-        let widthMatch = line.match(/(?:ความกว้าง ซม\.|Curtain Width \(cm\)):\s*(\d+)/i);
-        let heightMatch = line.match(/(?:ความสูง ซม\.|Variation3|Length Cm\.):\s*(\d+)/i);
+        let widthMatch = line.match(/(?:ความกว้าง ซม\.|ความกว้าง ซม\. \/ Width Cm\.|Curtain Width \(cm\)):\s*(\d+)/i);
+        let heightMatch = line.match(/(?:ความสูง ซม\.|ความสูง ซม\.\/ Length Cm\.|Variation3|Length Cm\.):\s*(\d+)/i);
         
         if (colorMatch && widthMatch && heightMatch) {
-            const color = colorMatch[1].trim();
+            let color = colorMatch[1].trim();
+            color = convertLazadaColor(color);
             const w = parseInt(widthMatch[1]) / 100;
             const h = parseInt(heightMatch[1]) / 100;
             const size = w.toFixed(2) + '*' + h.toFixed(2);
