@@ -279,7 +279,14 @@ function parseShopeeOrder(text) {
                 if (cm) { product.color = cm[0].trim(); break; }
             }
             const sizeMatch = line.match(/กว้าง\s*([\d.]+)\s*สูง\s*([\d.]+)/);
-            if (sizeMatch) product.size = sizeMatch[1] + '*' + sizeMatch[2];
+            if (sizeMatch) {
+                let w = parseFloat(sizeMatch[1]);
+                let h = parseFloat(sizeMatch[2]);
+                // ถ้าขนาด >= 100 แสดงว่าเป็น ซม. ให้แปลงเป็น ม.
+                if (w >= 100) w = w / 100;
+                if (h >= 100) h = h / 100;
+                product.size = w.toFixed(2) + '*' + h.toFixed(2);
+            }
             let nextLine = i + 1;
             if (nextLine < lines.length && lines[nextLine].trim().startsWith('เลข SKU')) nextLine++;
             if (nextLine + 1 < lines.length) {
