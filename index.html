@@ -332,31 +332,50 @@ function parseLazadaOrder(text) {
     const phoneMatch = text.match(/เบอร์ผู้รับ\s*[\n\r]+([^\n\r]+)/);
     if (phoneMatch) order.username = phoneMatch[1].trim();
     
-    // ดึงสินค้า - Lazada format
+    // ดึงสินค้า - Lazada format (เก็บทุกรายการก่อน)
+    const tempProducts = [];
     const lines = text.split(/[\n\r]+/);
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
         
-        // Pattern: โทนสี: xxx, ความกว้าง ซม.:xxx, ความสูง ซม.:xxx
-        // หรือ Color: xxx, Curtain Width (cm):xxx, Variation3:xxx
         let colorMatch = line.match(/(?:โทนสี|Color):\s*([^,]+)/);
         let widthMatch = line.match(/(?:ความกว้าง ซม\.|Curtain Width \(cm\)):\s*(\d+)/i);
         let heightMatch = line.match(/(?:ความสูง ซม\.|Variation3|Length Cm\.):\s*(\d+)/i);
         
         if (colorMatch && widthMatch && heightMatch) {
-            const product = { color: '', size: '', quantity: 1, cost: 0 };
-            product.color = colorMatch[1].trim();
+            const color = colorMatch[1].trim();
             const w = parseInt(widthMatch[1]) / 100;
             const h = parseInt(heightMatch[1]) / 100;
-            product.size = w.toFixed(2) + '*' + h.toFixed(2);
-            product.cost = calculateCost(product.color, product.size);
-            order.products.push(product);
+            const size = w.toFixed(2) + '*' + h.toFixed(2);
+            tempProducts.push({ color, size });
         }
     }
     
-    // ดึงยอดรวม
-    const totalMatch = text.match(/รวมทั้งหมด[\s\S]*?฿([\d,]+)/);
-    if (totalMatch) order.totalPayment = parseInt(totalMatch[1].replace(/,/g, ''));
+    // รวมสินค้าที่สี+ขนาดเดียวกัน
+    const productMap = {};
+    tempProducts.forEach(p => {
+        const key = p.color + '|' + p.size;
+        if (productMap[key]) {
+            productMap[key].quantity++;
+        } else {
+            productMap[key] = { color: p.color, size: p.size, quantity: 1, cost: 0 };
+        }
+    });
+    
+    // คำนวณต้นทุนและเพิ่มลง order.products
+    for (const key in productMap) {
+        const p = productMap[key];
+        p.cost = calculateCost(p.color, p.size);
+        order.products.push(p);
+    }
+    
+    // ดึงยอดชำระ = ยอดทั้งหมด + ค่าจัดส่ง
+    let totalAmount = 0, shippingFee = 0;
+    const totalMatch = text.match(/ยอดทั้งหมด:\s*฿([\d,]+)/);
+    if (totalMatch) totalAmount = parseInt(totalMatch[1].replace(/,/g, ''));
+    const shippingMatch = text.match(/ค่าจัดส่ง\s*฿([\d,]+)/);
+    if (shippingMatch) shippingFee = parseInt(shippingMatch[1].replace(/,/g, ''));
+    order.totalPayment = totalAmount + shippingFee;
     
     order.totalCost = order.products.reduce((s, p) => s + (p.cost * p.quantity), 0);
     if (order.products.length === 0) order.products.push({ color: '', size: '', quantity: 1, cost: 0 });
