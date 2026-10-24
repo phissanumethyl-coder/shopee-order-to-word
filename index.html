@@ -405,14 +405,14 @@ function parseShopeeOrder(text) {
     return order;
 }
 
-// Parse Lazada Order
+// Parse Lazada Order - ใช้ รหัสสินค้า:
 function parseLazadaOrder(text) {
     const order = { orderId: '', orderDate: '', customerName: '', address: '', username: '', products: [], totalPayment: 0, totalCost: 0, platform: 'lazada' };
-    
+
     // ดึง Order ID
     const orderIdMatch = text.match(/หมายเลขคำสั่งซื้อ:\s*(\d+)/);
     if (orderIdMatch) order.orderId = orderIdMatch[1];
-    
+
     // ดึงวันที่
     const dateMatch = text.match(/วันที่:\s*(\d{2})\s*(\w+)\s*(\d{4})/);
     if (dateMatch) {
@@ -422,58 +422,103 @@ function parseLazadaOrder(text) {
         const year = parseInt(dateMatch[3]) + 543;
         order.orderDate = day + '/' + month + '/' + year;
     }
-    
-    // ดึงชื่อลูกค้า
-    const nameMatch = text.match(/ชื่อผู้รับ\s*[\n\r]+([^\n\r]+)/);
-    if (nameMatch) order.customerName = nameMatch[1].trim();
-    
-    // ดึงที่อยู่
-    const addrMatch = text.match(/รายละเอียดที่อยู่สำหรับจัดส่ง\s*[\n\r]+([^\n\r]+)/);
-    if (addrMatch) order.address = addrMatch[1].trim();
-    
+
+    // ดึงชื่อลูกค้า (หาชื่อเต็มจาก "ชื่อผู้รับ" ที่มีข้อมูลจริง)
+    const lines = text.split(/[\n\r]+/);
+    for (let i = 0; i < lines.length; i++) {
+        if (lines[i].includes('ชื่อผู้รับ') && i + 1 < lines.length) {
+            const nextLine = lines[i + 1].trim();
+            // ชื่อเต็มจะมีมากกว่า 5 ตัวอักษรและไม่ใช่ข้อมูลอื่น
+            if (nextLine.length > 5 && !nextLine.includes('เบอร์') && !nextLine.includes('ที่อยู่')) {
+                order.customerName = nextLine;
+                break;
+            }
+        }
+    }
+
+    // ดึงที่อยู่ (ใช้ที่อยู่เรียกเก็บเงินที่เป็นภาษาไทยเต็ม)
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        // หาบรรทัดที่มี ตำบล/อำเภอ/จังหวัด หรือ Thailand
+        if ((line.includes('ตำบล') || line.includes('อำเภอ') || line.includes('จังหวัด')) && line.length > 20) {
+            order.address = line;
+            break;
+        }
+        if (line.includes(', Thailand') && line.length > 30) {
+            order.address = line;
+            break;
+        }
+    }
+
     // ดึงเบอร์โทร
     const phoneMatch = text.match(/เบอร์ผู้รับ\s*[\n\r]+([^\n\r]+)/);
     if (phoneMatch) order.username = phoneMatch[1].trim();
-    
-    // ฟังก์ชันแปลงสี Lazada
-    function convertLazadaColor(color) {
+
+    // ฟังก์ชันแปลงสี Lazada เป็นรหัส
+    function convertLazadaColorCode(color) {
         const colorMap = {
-            'เทาเข้ม': 'สีเทาเข้ม',
-            'เทาอ่อน': 'สีเทาอ่อน',
+            'เทาเข้ม': 'เทาเข้ม A6',
+            'เทาอ่อน': 'เทาอ่อน A4',
+            'สีเทาเข้ม': 'เทาเข้ม A6',
+            'สีเทาอ่อน': 'เทาอ่อน A4',
+            'ครีม': 'ครีม A7',
+            'สีครีม': 'ครีม A7',
+            'น้ำตาล': 'น้ำตาล A8',
             'ลายจุด': '733',
             'ลายเรียบ': '734'
         };
+        // ถ้ามีรหัส A อยู่แล้ว ไม่ต้องแปลง
+        if (/A\d+/i.test(color)) return color;
         return colorMap[color] || color;
     }
-    
-    // ดึงสินค้า - Lazada format (เก็บทุกรายการก่อน)
+
+    // ดึงสินค้าจาก "รหัสสินค้า:" (เก็บทุกรายการก่อน)
     const tempProducts = [];
-    const lines = text.split(/[\n\r]+/);
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
-        
-        let colorMatch = line.match(/(?:โทนสี|Color):\s*([^,]+)/);
-        let widthMatch = line.match(/(?:ความกว้าง ซม\.|ความกว้าง ซม\. \/ Width Cm\.|Curtain Width \(cm\)):\s*(\d+)/i);
-        let heightMatch = line.match(/(?:ความสูง ซม\.|ความสูง ซม\.\/ Length Cm\.|Variation3|Length Cm\.):\s*(\d+)/i);
-        
-        if (colorMatch && widthMatch && heightMatch) {
-            let color = colorMatch[1].trim();
-            color = convertLazadaColor(color);
-            const w = parseInt(widthMatch[1]) / 100;
-            const h = parseInt(heightMatch[1]) / 100;
-            const size = w.toFixed(2) + '*' + h.toFixed(2);
-            tempProducts.push({ color, size });
+
+        // Format: รหัสสินค้า: A4,กว้าง 1.80 สูง 2.80
+        // หรือ: รหัสสินค้า: เทาอ่อน,150,160
+        if (line.startsWith('รหัสสินค้า:')) {
+            const skuContent = line.replace('รหัสสินค้า:', '').trim();
+
+            let color = '';
+            let size = '';
+
+            // Format 1: สี,กว้าง X สูง Y
+            const format1 = skuContent.match(/^([^,]+),\s*กว้าง\s*([\d.]+)\s*สูง\s*([\d.]+)/);
+            if (format1) {
+                color = convertLazadaColorCode(format1[1].trim());
+                let w = parseFloat(format1[2]);
+                let h = parseFloat(format1[3]);
+                if (w >= 100) w = w / 100;
+                if (h >= 100) h = h / 100;
+                size = w.toFixed(2) + '*' + h.toFixed(2);
+            } else {
+                // Format 2: สี,กว้าง_ซม,สูง_ซม (เช่น เทาอ่อน,150,160)
+                const format2 = skuContent.match(/^([^,]+),\s*(\d+),\s*(\d+)/);
+                if (format2) {
+                    color = convertLazadaColorCode(format2[1].trim());
+                    const w = parseInt(format2[2]) / 100;
+                    const h = parseInt(format2[3]) / 100;
+                    size = w.toFixed(2) + '*' + h.toFixed(2);
+                }
+            }
+
+            if (color && size) {
+                tempProducts.push({ color, size });
+            }
         }
     }
-    
-    // รวมสินค้าที่สี+ขนาดเดียวกัน
+
+    // รวมสินค้าที่สี+ขนาดเดียวกัน (นับจำนวนจากการซ้ำ)
     const productMap = {};
     tempProducts.forEach(p => {
         const key = p.color + '|' + p.size;
         if (productMap[key]) {
             productMap[key].quantity++;
         } else {
-            productMap[key] = { color: p.color, size: p.size, quantity: 1, cost: 0 };
+            productMap[key] = { color: p.color, size: p.size, quantity: 1, cost: 0, note: '' };
         }
     });
     
@@ -676,7 +721,7 @@ function generateWord() {
     
     const pfLabel = pf ? ' <span style="background-color:cyan;padding:2px 8px;">' + pf + '</span>' : '';
     
-    const html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="UTF-8"><style>@page{size:landscape;margin:1cm;}@page Section1{size:841.9pt 595.3pt;mso-page-orientation:landscape;margin:1cm;}div.Section1{page:Section1;}body{font-family:"TH SarabunPSK","TH Sarabun New",sans-serif;font-size:16pt;}table{border-collapse:collapse;width:100%;}th{border:1px solid black;padding:5px;text-align:center;font-weight:bold;font-size:16pt;}td{font-family:"TH SarabunPSK","TH Sarabun New",sans-serif;}.title{text-align:left;font-size:18pt;font-weight:bold;margin-bottom:10px;}.highlight{background-color:yellow;}</style></head><body><div class="Section1"><div class="title">' + dt + ' <span class="highlight">ของจัดส่งวันที่ ' + fdd + '</span>' + pfLabel + '</div><table><tr><th style="width:10%">วันที่ออเดอร์</th><th style="width:32%">ชื่อ-ที่อยู่</th><th style="width:6%">จำนวน</th><th style="width:12%">สี</th><th style="width:10%">ขนาด</th><th style="width:6%">เซ็นรับ</th><th style="width:10%">ราคา</th><th style="width:10%">ชำระ</th></tr>' + tr + '<tr><td colspan="2" style="text-align:center;border:1px solid black;padding:5px;font-weight:bold;font-size:16pt">รวม</td><td colspan="3" style="text-align:center;border:1px solid black;padding:5px;font-weight:bold;font-size:16pt">' + tq + ' ผืน</td><td style="border:1px solid black;padding:5px"></td><td style="text-align:center;border:1px solid black;padding:5px;font-weight:bold;font-size:16pt">' + tc.toFixed(2) + '</td><td style="text-align:center;border:1px solid black;padding:5px;font-weight:bold;font-size:16pt">' + tp + '</td></tr></table></div></body></html>';
+    const html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="UTF-8"><style>@page{size:landscape;margin:1cm;}@page Section1{size:841.9pt 595.3pt;mso-page-orientation:landscape;margin:1cm;}div.Section1{page:Section1;}body{font-family:"TH SarabunPSK","TH Sarabun New",sans-serif;font-size:16pt;}table{border-collapse:collapse;width:100%;}th{border:1px solid black;padding:5px;text-align:center;font-weight:bold;font-size:16pt;}td{font-family:"TH SarabunPSK","TH Sarabun New",sans-serif;}.title{text-align:left;font-size:18pt;font-weight:bold;margin-bottom:10px;}.highlight{background-color:yellow;}</style></head><body><div class="Section1"><div class="title">' + dt + ' <span class="highlight">ของจัดส่งวันที่ ' + fdd + '</span>' + pfLabel + '</div><table><tr><th style="width:10%">วันที่ออเดอร์</th><th style="width:32%">ชื่อ-ที่อยู่</th><th style="width:6%">จำนวน</th><th style="width:12%">สี</th><th style="width:10%">ขนาด</th><th style="width:6%">เซ็นรับ</th><th style="width:10%">ราคา</th><th style="width:10%">ชำระ</th></tr>' + tr + '<tr><td colspan="2" style="text-align:center;border:1px solid black;padding:5px;font-weight:bold;font-size:16pt">รวม</td><td colspan="4" style="text-align:center;border:1px solid black;padding:5px;font-weight:bold;font-size:16pt">' + tq + ' ผืน</td><td style="text-align:center;border:1px solid black;padding:5px;font-weight:bold;font-size:16pt">' + tc.toFixed(2) + '</td><td style="text-align:center;border:1px solid black;padding:5px;font-weight:bold;font-size:16pt">' + tp + '</td></tr></table></div></body></html>';
     
     const blob = new Blob(['\ufeff' + html], { type: 'application/msword' });
     const url = URL.createObjectURL(blob);
