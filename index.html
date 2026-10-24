@@ -297,49 +297,94 @@ function parseShopeeOrder(text) {
 
         // หา "เลข SKU:" ซึ่งมี format: เลข SKU: สี,กว้าง X สูง Y
         if (line.startsWith('เลข SKU:')) {
-            const product = { color: '', size: '', quantity: 1, cost: 0 };
+            // ดึงข้อมูลจาก SKU
+            let skuContent = line.replace('เลข SKU:', '').trim();
 
-            // ดึงข้อมูลจาก SKU: "เทาเข้ม A6,กว้าง 3.00 สูง 2.30"
-            const skuContent = line.replace('เลข SKU:', '').trim();
-
-            // แยกสีและขนาด (คั่นด้วย ,กว้าง)
-            const skuParts = skuContent.split(/,\s*กว้าง/);
-            if (skuParts.length >= 1) {
-                product.color = skuParts[0].trim();
+            // ตรวจสอบ ตีนตุ๊กแก / ม่านตะขอ
+            let note = '';
+            if (skuContent.includes('ตีนตุ๊กแก')) {
+                note = 'ตีนตุ๊กแก';
+                skuContent = skuContent.replace('ตีนตุ๊กแก', '').trim();
+            } else if (skuContent.includes('ม่านตะขอ')) {
+                note = 'ม่านตะขอ';
+                skuContent = skuContent.replace('ม่านตะขอ', '').trim();
             }
 
             // ดึงขนาด กว้าง X สูง Y
+            let productSize = '';
             const sizeMatch = skuContent.match(/กว้าง\s*([\d.]+)\s*สูง\s*([\d.]+)/);
             if (sizeMatch) {
                 let w = parseFloat(sizeMatch[1]);
                 let h = parseFloat(sizeMatch[2]);
-                // ถ้าขนาด >= 100 แสดงว่าเป็น ซม. ให้แปลงเป็น ม.
                 if (w >= 100) w = w / 100;
                 if (h >= 100) h = h / 100;
-                product.size = w.toFixed(2) + '*' + h.toFixed(2);
+                productSize = w.toFixed(2) + '*' + h.toFixed(2);
             }
 
-            // ดึงจำนวน: บรรทัดถัดไปคือ ราคา, บรรทัดถัดไปอีกคือ จำนวน
-            // Format: เลข SKU: xxx
-            //         ราคา (เช่น 1,310)
-            //         จำนวน (เช่น 2)
+            // ดึงจำนวน
+            let quantity = 1;
             let nextIdx = i + 1;
             if (nextIdx < lines.length) {
                 const priceLine = lines[nextIdx].trim();
                 if (/^[\d,]+$/.test(priceLine)) {
-                    // บรรทัดนี้คือราคา ดูบรรทัดถัดไปเป็นจำนวน
                     if (nextIdx + 1 < lines.length) {
                         const qtyLine = lines[nextIdx + 1].trim();
                         if (/^\d+$/.test(qtyLine)) {
-                            product.quantity = parseInt(qtyLine);
+                            quantity = parseInt(qtyLine);
                         }
                     }
                 }
             }
 
-            // คำนวณต้นทุน
-            product.cost = calculateCost(product.color, product.size);
-            order.products.push(product);
+            // แยกสี (คั่นด้วย ,กว้าง)
+            const skuParts = skuContent.split(/,\s*กว้าง/);
+            let colorPart = skuParts.length >= 1 ? skuParts[0].trim() : '';
+
+            // ตรวจสอบ 1 แถม 1 (สี+ม่านโปร่ง)
+            if (colorPart.includes('+ม่านโปร่ง')) {
+                // แยกเป็น 2 รายการ
+                const mainColor = colorPart.replace('+ม่านโปร่ง', '').trim();
+
+                // แปลงสีเป็นรหัส A
+                let solidCode = mainColor;
+                if (mainColor === 'สีเทาเข้ม' || mainColor === 'เทาเข้ม') solidCode = 'เทาเข้ม A6';
+                else if (mainColor === 'สีเทาอ่อน' || mainColor === 'เทาอ่อน') solidCode = 'เทาอ่อน A4';
+                else if (mainColor === 'สีครีม' || mainColor === 'ครีม') solidCode = 'ครีม A7';
+                else if (mainColor === 'น้ำตาล') solidCode = 'น้ำตาล A8';
+
+                // สินค้า 1: ผ้าทึบ
+                const product1 = {
+                    color: solidCode,
+                    size: productSize,
+                    quantity: quantity,
+                    cost: 0,
+                    note: note
+                };
+                product1.cost = calculateCost(product1.color, product1.size);
+                order.products.push(product1);
+
+                // สินค้า 2: ผ้าโปร่ง 734
+                const product2 = {
+                    color: '734',
+                    size: productSize,
+                    quantity: quantity,
+                    cost: 0,
+                    note: note
+                };
+                product2.cost = calculateCost(product2.color, product2.size);
+                order.products.push(product2);
+            } else {
+                // สินค้าปกติ
+                const product = {
+                    color: colorPart,
+                    size: productSize,
+                    quantity: quantity,
+                    cost: 0,
+                    note: note
+                };
+                product.cost = calculateCost(product.color, product.size);
+                order.products.push(product);
+            }
         }
     }
 
@@ -484,7 +529,9 @@ function parseAndPreview(platform) {
         else if (ft === 'sheer') fl = '🔵 ผ้าโปร่ง';
         else if (ft === 'solid') fl = '🟢 ผ้าพื้น';
         h += '<div style="background:#f5f5f5;padding:8px;margin:5px 0;border-radius:4px;">';
-        h += '<strong>#' + (i + 1) + '</strong> ' + fl + '<br>';
+        h += '<strong>#' + (i + 1) + '</strong> ' + fl;
+        if (p.note) h += ' <span style="background:#ff9800;color:white;padding:1px 6px;border-radius:4px;font-size:12px;">' + p.note + '</span>';
+        h += '<br>';
         h += 'สี: ' + (p.color || '-') + ', ขนาด: ' + (p.size || '-') + ', จำนวน: ' + p.quantity + '<br>';
         h += '<span style="color:#e65100;font-weight:bold;">💰 ต้นทุน: ' + p.cost.toFixed(2) + ' บาท/ผืน</span></div>';
     });
@@ -596,13 +643,14 @@ function generateWord() {
     orders.forEach(o => {
         tp += o.totalPayment;
         tc += o.totalCost;
-        let qs = [], cs = [], ss = [], cts = [];
+        let qs = [], cs = [], ss = [], cts = [], notes = [];
         o.products.forEach(p => {
             tq += p.quantity;
             qs.push(p.quantity);
             cs.push(p.color || '');
             ss.push(p.size || '');
             cts.push((p.cost * p.quantity).toFixed(2));
+            notes.push(p.note || '');
         });
         const dod = ood || o.orderDate;
         tr += '<tr>';
@@ -619,7 +667,8 @@ function generateWord() {
         tr += '<td style="text-align:center;border:1px solid black;padding:5px;font-size:16pt;vertical-align:top">' + qs.join('<br>') + '</td>';
         tr += '<td style="text-align:center;border:1px solid black;padding:5px;font-size:16pt;vertical-align:top">' + cs.join('<br>') + '</td>';
         tr += '<td style="text-align:center;border:1px solid black;padding:5px;font-size:16pt;vertical-align:top">' + ss.join('<br>') + '</td>';
-        tr += '<td style="border:1px solid black;padding:5px;font-size:16pt;vertical-align:top"></td>';
+        // ช่องเซ็นรับ - แสดง note (ตีนตุ๊กแก/ม่านตะขอ)
+        tr += '<td style="text-align:center;border:1px solid black;padding:5px;font-size:16pt;vertical-align:top">' + notes.join('<br>') + '</td>';
         tr += '<td style="text-align:center;border:1px solid black;padding:5px;font-size:16pt;vertical-align:top">' + cts.join('<br>') + '</td>';
         tr += '<td style="text-align:center;border:1px solid black;padding:5px;font-size:16pt;vertical-align:top">' + o.totalPayment + '</td>';
         tr += '</tr>';
@@ -627,7 +676,7 @@ function generateWord() {
     
     const pfLabel = pf ? ' <span style="background-color:cyan;padding:2px 8px;">' + pf + '</span>' : '';
     
-    const html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="UTF-8"><style>@page{size:landscape;margin:1cm;}@page Section1{size:841.9pt 595.3pt;mso-page-orientation:landscape;margin:1cm;}div.Section1{page:Section1;}body{font-family:"TH SarabunPSK","TH Sarabun New",sans-serif;font-size:16pt;}table{border-collapse:collapse;width:100%;}th{border:1px solid black;padding:5px;text-align:center;font-weight:bold;font-size:16pt;}td{font-family:"TH SarabunPSK","TH Sarabun New",sans-serif;}.title{text-align:left;font-size:18pt;font-weight:bold;margin-bottom:10px;}.highlight{background-color:yellow;}</style></head><body><div class="Section1"><div class="title">' + dt + ' <span class="highlight">ของจัดส่งวันที่ ' + fdd + '</span>' + pfLabel + '</div><table><tr><th style="width:10%">วันที่ออเดอร์</th><th style="width:32%">ชื่อ-ที่อยู่</th><th style="width:6%">จำนวน</th><th style="width:12%">สี</th><th style="width:10%">ขนาด</th><th style="width:6%">เซ็นรับ</th><th style="width:10%">ราคา</th><th style="width:10%">ชำระ</th></tr>' + tr + '<tr><td colspan="2" style="text-align:center;border:1px solid black;padding:5px;font-weight:bold;font-size:16pt">รวม</td><td style="text-align:center;border:1px solid black;padding:5px;font-weight:bold;font-size:16pt">' + tq + '</td><td style="border:1px solid black;padding:5px"></td><td style="border:1px solid black;padding:5px"></td><td style="border:1px solid black;padding:5px"></td><td style="text-align:center;border:1px solid black;padding:5px;font-weight:bold;font-size:16pt">' + tc.toFixed(2) + '</td><td style="text-align:center;border:1px solid black;padding:5px;font-weight:bold;font-size:16pt">' + tp + '</td></tr></table></div></body></html>';
+    const html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="UTF-8"><style>@page{size:landscape;margin:1cm;}@page Section1{size:841.9pt 595.3pt;mso-page-orientation:landscape;margin:1cm;}div.Section1{page:Section1;}body{font-family:"TH SarabunPSK","TH Sarabun New",sans-serif;font-size:16pt;}table{border-collapse:collapse;width:100%;}th{border:1px solid black;padding:5px;text-align:center;font-weight:bold;font-size:16pt;}td{font-family:"TH SarabunPSK","TH Sarabun New",sans-serif;}.title{text-align:left;font-size:18pt;font-weight:bold;margin-bottom:10px;}.highlight{background-color:yellow;}</style></head><body><div class="Section1"><div class="title">' + dt + ' <span class="highlight">ของจัดส่งวันที่ ' + fdd + '</span>' + pfLabel + '</div><table><tr><th style="width:10%">วันที่ออเดอร์</th><th style="width:32%">ชื่อ-ที่อยู่</th><th style="width:6%">จำนวน</th><th style="width:12%">สี</th><th style="width:10%">ขนาด</th><th style="width:6%">เซ็นรับ</th><th style="width:10%">ราคา</th><th style="width:10%">ชำระ</th></tr>' + tr + '<tr><td colspan="2" style="text-align:center;border:1px solid black;padding:5px;font-weight:bold;font-size:16pt">รวม</td><td colspan="3" style="text-align:center;border:1px solid black;padding:5px;font-weight:bold;font-size:16pt">' + tq + ' ผืน</td><td style="border:1px solid black;padding:5px"></td><td style="text-align:center;border:1px solid black;padding:5px;font-weight:bold;font-size:16pt">' + tc.toFixed(2) + '</td><td style="text-align:center;border:1px solid black;padding:5px;font-weight:bold;font-size:16pt">' + tp + '</td></tr></table></div></body></html>';
     
     const blob = new Blob(['\ufeff' + html], { type: 'application/msword' });
     const url = URL.createObjectURL(blob);
