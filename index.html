@@ -163,8 +163,10 @@ const priceOversizedPatterned = [
     {minW:4.30,maxW:4.40,minH:2.63,maxH:3.20,cost:900.64},{minW:4.50,maxW:4.60,minH:2.63,maxH:3.20,cost:940.64},{minW:4.70,maxW:4.80,minH:2.63,maxH:3.20,cost:980.64},{minW:4.90,maxW:5.00,minH:2.63,maxH:3.20,cost:1020.64},
     {minW:5.10,maxW:5.20,minH:2.63,maxH:3.20,cost:1060.64},{minW:5.30,maxW:5.40,minH:2.63,maxH:3.20,cost:1100.64}
 ];
-const solidCodes = ['สีเทาเข้ม','สีเทาอ่อน','สีครีม','เทาเข้ม','เทาอ่อน','ครีม','น้ำตาล','A4','A6','A7','A8','A9','A10','A18','828','828-1','828-3','828-6'];
+const solidCodes = ['A4','A6','A7','A8','A9','A10','A18','828','828-1','828-3','828-6'];
 const sheerCodes = ['733','734'];
+const premiumCodes = ['Z-','M-']; // ผ้าพรีเมี่ยม ขึ้นต้นด้วย Z หรือ M
+const patternedCodes = ['2021-']; // ผ้าลายที่ขึ้นต้นด้วย 2021
 
 function switchTab(platform) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -175,13 +177,26 @@ function switchTab(platform) {
 
 function getFabricType(c) {
     if (!c) return 'patterned';
-    const code = c.trim();
+    const code = c.trim().toUpperCase();
+
+    // 1. ตรวจสอบผ้าพรีเมี่ยม (ขึ้นต้นด้วย Z หรือ M เช่น Z-05, M-04)
+    if (/^[ZM]-?\d*/i.test(code)) return 'premium';
+    for (const s of premiumCodes) if (code.includes(s.toUpperCase())) return 'premium';
+
+    // 2. ตรวจสอบผ้าโปร่ง (733, 734)
     for (const s of sheerCodes) if (code.includes(s)) return 'sheer';
+
+    // 3. ตรวจสอบผ้าพื้น (A4-A18, 828)
     if (/A\d+/i.test(code)) return 'solid';
     if (code.includes('828')) return 'solid';
-    const numMatch = code.match(/\d{3,}/);
-    if (numMatch) return 'patterned';
-    for (const s of solidCodes) if (code.toLowerCase().includes(s.toLowerCase())) return 'solid';
+    for (const s of solidCodes) if (code.toUpperCase().includes(s.toUpperCase())) return 'solid';
+
+    // 4. ตรวจสอบผ้าลาย (2021-x, เลข 3 หลัก)
+    if (/2021-\d+/i.test(code)) return 'patterned';
+    const numMatch = code.match(/\d{3}/);
+    if (numMatch && !code.includes('828')) return 'patterned';
+
+    // 5. Default = ผ้าลาย
     return 'patterned';
 }
 
@@ -239,46 +254,62 @@ function calculateCost(col, sz) {
     return bc + extraCost;
 }
 
-// Parse Shopee Order
+// Parse Shopee Order - อ้างอิงจาก SKU
 function parseShopeeOrder(text) {
     const order = { orderId: '', orderDate: '', customerName: '', address: '', username: '', products: [], totalPayment: 0, totalCost: 0, platform: 'shopee' };
+
+    // ดึง Order ID
     const orderIdMatch = text.match(/หมายเลขคำสั่งซื้อ\s*[\n\r]*\s*(\w+)/);
     if (orderIdMatch) order.orderId = orderIdMatch[1];
+
+    // ดึงวันที่จาก Order ID (6 ตัวแรก = YYMMDD)
     if (order.orderId && order.orderId.length >= 6) {
         const d = order.orderId.substring(0, 6);
         order.orderDate = parseInt(d.substring(0, 2)) + '/' + parseInt(d.substring(2, 4)) + '/' + (2000 + parseInt(d.substring(4, 6)) + 543);
     }
+
+    // ดึงชื่อ-ที่อยู่
     const addressMatch = text.match(/ที่อยู่ในการจัดส่ง\s*[\n\r]+([^\n\r]+)[\n\r]+([^\n\r]+)/);
-    if (addressMatch) { order.customerName = addressMatch[1].trim(); order.address = addressMatch[2].trim(); }
+    if (addressMatch) {
+        order.customerName = addressMatch[1].trim();
+        order.address = addressMatch[2].trim();
+    }
+
     const lines = text.split(/[\n\r]+/);
+
+    // ดึง Username (ก่อน "รายละเอียดการชำระเงิน")
     for (let i = 0; i < lines.length; i++) {
         if (lines[i].includes('รายละเอียดการชำระเงิน')) {
             for (let j = i - 1; j >= Math.max(0, i - 5); j--) {
                 const line = lines[j].trim();
                 if (/^[a-zA-Z0-9_][a-zA-Z0-9_.]*$/.test(line) && line.length >= 2 && line.length <= 100 && !line.match(/^\d+$/)) {
-                    order.username = '@' + line; break;
+                    order.username = '@' + line;
+                    break;
                 }
             }
             break;
         }
     }
+
+    // ดึงสินค้าจาก "เลข SKU:" (อ้างอิงหลัก)
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
-        if (line.startsWith('ตัวเลือกสินค้า')) {
+
+        // หา "เลข SKU:" ซึ่งมี format: เลข SKU: สี,กว้าง X สูง Y
+        if (line.startsWith('เลข SKU:')) {
             const product = { color: '', size: '', quantity: 1, cost: 0 };
-            const colorPatterns = [
-                /น้ำตาล\s*A?\d*/i, /สีเทาเข้ม\s*A?\d*/i, /สีเทาอ่อน\s*A?\d*/i, /สีครีม\s*A?\d*/i,
-                /เทาเข้ม\s*A?\d*/i, /เทาอ่อน\s*A?\d*/i, /ครีม\s*A?\d*/i, /ขาว\s*A?\d*/i, /ดำ\s*A?\d*/i,
-                /เขียว\s*A?\d*/i, /น้ำเงิน\s*A?\d*/i, /ฟ้า\s*A?\d*/i, /ชมพู\s*A?\d*/i, /ม่วง\s*A?\d*/i,
-                /แดง\s*A?\d*/i, /เหลือง\s*A?\d*/i, /ส้ม\s*A?\d*/i, /เงิน\s*A?\d*/i, /ทอง\s*A?\d*/i,
-                /เบจ\s*A?\d*/i, /กากี\s*A?\d*/i, /เทา\s*A?\d*/i, /บลอนด์\s*\d*/i,
-                /ผ้าโปร่ง\s*\d*/i, /ผ้าม่านสีครีม/i, /A\d+/i, /828[-]?\d*/i, /\d{3,}/
-            ];
-            for (const pt of colorPatterns) {
-                const cm = line.match(pt);
-                if (cm) { product.color = cm[0].trim(); break; }
+
+            // ดึงข้อมูลจาก SKU: "เทาเข้ม A6,กว้าง 3.00 สูง 2.30"
+            const skuContent = line.replace('เลข SKU:', '').trim();
+
+            // แยกสีและขนาด (คั่นด้วย ,กว้าง)
+            const skuParts = skuContent.split(/,\s*กว้าง/);
+            if (skuParts.length >= 1) {
+                product.color = skuParts[0].trim();
             }
-            const sizeMatch = line.match(/กว้าง\s*([\d.]+)\s*สูง\s*([\d.]+)/);
+
+            // ดึงขนาด กว้าง X สูง Y
+            const sizeMatch = skuContent.match(/กว้าง\s*([\d.]+)\s*สูง\s*([\d.]+)/);
             if (sizeMatch) {
                 let w = parseFloat(sizeMatch[1]);
                 let h = parseFloat(sizeMatch[2]);
@@ -287,25 +318,45 @@ function parseShopeeOrder(text) {
                 if (h >= 100) h = h / 100;
                 product.size = w.toFixed(2) + '*' + h.toFixed(2);
             }
-            let nextLine = i + 1;
-            if (nextLine < lines.length && lines[nextLine].trim().startsWith('เลข SKU')) nextLine++;
-            if (nextLine + 1 < lines.length) {
-                const priceLine = lines[nextLine].trim();
-                const qtyLine = lines[nextLine + 1].trim();
-                if (/^[\d,]+$/.test(priceLine) && /^\d+$/.test(qtyLine)) product.quantity = parseInt(qtyLine);
+
+            // ดึงจำนวน: บรรทัดถัดไปคือ ราคา, บรรทัดถัดไปอีกคือ จำนวน
+            // Format: เลข SKU: xxx
+            //         ราคา (เช่น 1,310)
+            //         จำนวน (เช่น 2)
+            let nextIdx = i + 1;
+            if (nextIdx < lines.length) {
+                const priceLine = lines[nextIdx].trim();
+                if (/^[\d,]+$/.test(priceLine)) {
+                    // บรรทัดนี้คือราคา ดูบรรทัดถัดไปเป็นจำนวน
+                    if (nextIdx + 1 < lines.length) {
+                        const qtyLine = lines[nextIdx + 1].trim();
+                        if (/^\d+$/.test(qtyLine)) {
+                            product.quantity = parseInt(qtyLine);
+                        }
+                    }
+                }
             }
+
+            // คำนวณต้นทุน
             product.cost = calculateCost(product.color, product.size);
             order.products.push(product);
         }
     }
+
+    // ดึงยอดชำระ
     let pp = 0, sf = 0;
     const bs = text.match(/การชำระเงินของผู้ซื้อ[\s\S]*?รวมค่าสินค้า\s*[฿B]?([\d,]+)/);
     if (bs) pp = parseInt(bs[1].replace(/,/g, ''));
     const bsh = text.match(/การชำระเงินของผู้ซื้อ[\s\S]*?ค่าจัดส่ง\s*[฿B]?([\d,]+)/);
     if (bsh) sf = parseInt(bsh[1].replace(/,/g, ''));
     order.totalPayment = pp + sf;
+
+    // คำนวณต้นทุนรวม
     order.totalCost = order.products.reduce((s, p) => s + (p.cost * p.quantity), 0);
+
+    // ถ้าไม่พบสินค้า ให้เพิ่ม default
     if (order.products.length === 0) order.products.push({ color: '', size: '', quantity: 1, cost: 0 });
+
     return order;
 }
 
@@ -428,7 +479,10 @@ function parseAndPreview(platform) {
     
     o.products.forEach((p, i) => {
         const ft = getFabricType(p.color);
-        const fl = ft === 'sheer' ? '🔵 ผ้าโปร่ง' : (ft === 'solid' ? '🟢 ผ้าพื้น' : '🟠 ผ้าลาย');
+        let fl = '🟠 ผ้าลาย';
+        if (ft === 'premium') fl = '🟣 ผ้าพรีเมี่ยม';
+        else if (ft === 'sheer') fl = '🔵 ผ้าโปร่ง';
+        else if (ft === 'solid') fl = '🟢 ผ้าพื้น';
         h += '<div style="background:#f5f5f5;padding:8px;margin:5px 0;border-radius:4px;">';
         h += '<strong>#' + (i + 1) + '</strong> ' + fl + '<br>';
         h += 'สี: ' + (p.color || '-') + ', ขนาด: ' + (p.size || '-') + ', จำนวน: ' + p.quantity + '<br>';
