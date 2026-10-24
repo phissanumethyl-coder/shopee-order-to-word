@@ -472,9 +472,18 @@ function parseLazadaOrder(text) {
         return colorMap[color] || color;
     }
 
-    // ดึงสินค้าจาก "รหัสสินค้า:" (เก็บทุกรายการก่อน)
-    const tempProducts = [];
+    // หาตำแหน่ง "ข้อมูลการชำระเงินของฉัน" เพื่อหยุดนับ
+    let stopIndex = lines.length;
     for (let i = 0; i < lines.length; i++) {
+        if (lines[i].includes('ข้อมูลการชำระเงินของฉัน')) {
+            stopIndex = i;
+            break;
+        }
+    }
+
+    // ดึงสินค้าจาก "รหัสสินค้า:" (เฉพาะก่อน "ข้อมูลการชำระเงินของฉัน")
+    const tempProducts = [];
+    for (let i = 0; i < stopIndex; i++) {
         const line = lines[i].trim();
 
         // Format: รหัสสินค้า: A4,กว้าง 1.80 สูง 2.80
