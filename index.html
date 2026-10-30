@@ -328,9 +328,9 @@ function parseShopeeOrder(text) {
                 }
             }
 
-            // แยกสี (คั่นด้วย ,กว้าง)
-            const skuParts = skuContent.split(/,\s*กว้าง/);
-            let colorPart = skuParts.length >= 1 ? skuParts[0].trim() : '';
+            // แยกสี (ตัด "กว้าง..." ออก)
+            // รองรับทั้ง "A18,กว้าง 1.20 สูง 2.20" และ "A18 กว้าง 1.20 สูง 2.20"
+            let colorPart = skuContent.replace(/[,\s]*กว้าง.*$/, '').trim();
 
             // ตรวจสอบ 1 แถม 1 (สี+ม่านโปร่ง)
             if (colorPart.includes('+ม่านโปร่ง')) {
