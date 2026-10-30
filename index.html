@@ -690,6 +690,8 @@ function generateWord() {
         tp += o.totalPayment;
         tc += o.totalCost;
         let qs = [], cs = [], ss = [], cts = [], notes = [];
+
+        // 1. เพิ่มผ้าม่านก่อน
         o.products.forEach(p => {
             tq += p.quantity;
             qs.push(p.quantity);
@@ -697,6 +699,19 @@ function generateWord() {
             ss.push(p.size || '');
             cts.push((p.cost * p.quantity).toFixed(2));
             notes.push(p.note || '');
+        });
+
+        // 2. เพิ่มสายรวบเรียบตามสีและจำนวนผ้าม่าน
+        o.products.forEach(p => {
+            qs.push(p.quantity);
+            // ดึงเฉพาะรหัสสี เช่น "เทาเข้ม A6" -> "A6", "734" -> "734", "ทอง 861" -> "861"
+            let colorCode = p.color || '';
+            const match = colorCode.match(/([A-Z]\d+|\d{3}(-\d+)?)/i);
+            if (match) colorCode = match[1];
+            cs.push(colorCode);
+            ss.push('สายรวบเรียบ');
+            cts.push('');
+            notes.push('');
         });
         const dod = ood || o.orderDate;
         tr += '<tr>';
