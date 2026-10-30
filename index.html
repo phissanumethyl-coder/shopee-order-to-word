@@ -704,9 +704,10 @@ function generateWord() {
         // 2. เพิ่มสายรวบเรียบตามสีและจำนวนผ้าม่าน
         o.products.forEach(p => {
             qs.push(p.quantity);
-            // ดึงเฉพาะรหัสสี เช่น "เทาเข้ม A6" -> "A6", "734" -> "734", "ทอง 861" -> "861"
+            // ดึงเฉพาะรหัสสี เช่น "เทาเข้ม A6" -> "A6", "2021-5" -> "2021-5", "ทอง 861" -> "861"
             let colorCode = p.color || '';
-            const match = colorCode.match(/([A-Z]\d+|\d{3}(-\d+)?)/i);
+            // ลำดับการจับ: 2021-x ก่อน, แล้ว A+เลข, แล้ว 828-x, แล้วเลข 3 หลัก
+            const match = colorCode.match(/(2021-\d+|[A-Z]\d+|\d{3,4}-\d+|\d{3})/i);
             if (match) colorCode = match[1];
             cs.push(colorCode);
             ss.push('สายรวบเรียบ');
