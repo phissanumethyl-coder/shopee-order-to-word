@@ -415,21 +415,49 @@ function parseLazadaOrder(text) {
         order.orderDate = day + '/' + month + '/' + year;
     }
 
-    // ดึงชื่อลูกค้า (หาชื่อเต็มจาก "ชื่อผู้รับ" ที่มีข้อมูลจริง)
+    // ดึงชื่อลูกค้าจากส่วน "ที่อยู่จัดส่ง" (ไม่ใช่ "ที่อยู่เรียกเก็บเงิน")
     const lines = text.split(/[\n\r]+/);
+
+    // หาช่วงระหว่าง "ที่อยู่จัดส่ง" กับ "ที่อยู่เรียกเก็บเงิน"
+    let shipStart = -1;
+    let billStart = lines.length;
     for (let i = 0; i < lines.length; i++) {
-        if (lines[i].includes('ชื่อผู้รับ') && i + 1 < lines.length) {
+        if (lines[i].includes('ที่อยู่จัดส่ง') || lines[i].includes('ที่อยู่ผู้ซื้อ')) {
+            shipStart = i;
+        }
+        if (lines[i].includes('ที่อยู่เรียกเก็บเงิน')) {
+            billStart = i;
+            break;
+        }
+    }
+
+    // ดึงชื่อผู้รับจากส่วนที่อยู่จัดส่ง
+    for (let i = shipStart + 1; i < billStart; i++) {
+        if (lines[i].includes('ชื่อผู้รับ') && i + 1 < billStart) {
             const nextLine = lines[i + 1].trim();
-            // ชื่อเต็มจะมีมากกว่า 5 ตัวอักษรและไม่ใช่ข้อมูลอื่น
-            if (nextLine.length > 5 && !nextLine.includes('เบอร์') && !nextLine.includes('ที่อยู่')) {
+            // ชื่อเต็มจะมีมากกว่า 3 ตัวอักษรและไม่ใช่ข้อมูลอื่น
+            if (nextLine.length > 3 && !nextLine.includes('เบอร์') && !nextLine.includes('ที่อยู่')) {
                 order.customerName = nextLine;
                 break;
             }
         }
     }
 
-    // ดึงที่อยู่ (ใช้ที่อยู่เรียกเก็บเงินที่เป็นภาษาไทยเต็ม)
+    // ดึงที่อยู่จัดส่ง (ไม่ใช่ที่อยู่เรียกเก็บเงิน)
+    // หาช่วงระหว่าง "ที่อยู่จัดส่ง" กับ "ที่อยู่เรียกเก็บเงิน"
+    let shippingStart = -1;
+    let billingStart = lines.length;
     for (let i = 0; i < lines.length; i++) {
+        if (lines[i].includes('ที่อยู่จัดส่ง') || lines[i].includes('ที่อยู่ผู้ซื้อ')) {
+            shippingStart = i;
+        }
+        if (lines[i].includes('ที่อยู่เรียกเก็บเงิน')) {
+            billingStart = i;
+            break;
+        }
+    }
+    // ดึงที่อยู่จากช่วง ที่อยู่จัดส่ง (ก่อน ที่อยู่เรียกเก็บเงิน)
+    for (let i = shippingStart + 1; i < billingStart; i++) {
         const line = lines[i].trim();
         // หาบรรทัดที่มี ตำบล/อำเภอ/จังหวัด หรือ Thailand
         if ((line.includes('ตำบล') || line.includes('อำเภอ') || line.includes('จังหวัด')) && line.length > 20) {
