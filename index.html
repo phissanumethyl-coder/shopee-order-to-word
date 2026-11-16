@@ -415,64 +415,62 @@ function parseLazadaOrder(text) {
         order.orderDate = day + '/' + month + '/' + year;
     }
 
-    // ดึงชื่อลูกค้าจากส่วน "ที่อยู่จัดส่ง" (ไม่ใช่ "ที่อยู่เรียกเก็บเงิน")
+    // ดึงชื่อและที่อยู่จาก "ที่อยู่จัดส่ง" เท่านั้น (ไม่ fallback ไป "ที่อยู่เรียกเก็บเงิน")
     const lines = text.split(/[\n\r]+/);
 
-    // หาช่วงระหว่าง "ที่อยู่จัดส่ง" กับ "ที่อยู่เรียกเก็บเงิน"
+    // หาตำแหน่งส่วนต่างๆ
     let shipStart = -1;
-    let billStart = lines.length;
+    let billStart = -1;
     for (let i = 0; i < lines.length; i++) {
-        if (lines[i].includes('ที่อยู่จัดส่ง') || lines[i].includes('ที่อยู่ผู้ซื้อ')) {
+        if ((lines[i].includes('ที่อยู่จัดส่ง') || lines[i].includes('ที่อยู่ผู้ซื้อ')) && shipStart === -1) {
             shipStart = i;
         }
-        if (lines[i].includes('ที่อยู่เรียกเก็บเงิน')) {
+        if (lines[i].includes('ที่อยู่เรียกเก็บเงิน') && billStart === -1) {
             billStart = i;
-            break;
         }
     }
 
-    // ดึงชื่อผู้รับจากส่วนที่อยู่จัดส่ง
-    for (let i = shipStart + 1; i < billStart; i++) {
-        if (lines[i].includes('ชื่อผู้รับ') && i + 1 < billStart) {
-            const nextLine = lines[i + 1].trim();
-            // ชื่อเต็มจะมีมากกว่า 3 ตัวอักษรและไม่ใช่ข้อมูลอื่น
-            if (nextLine.length > 3 && !nextLine.includes('เบอร์') && !nextLine.includes('ที่อยู่')) {
-                order.customerName = nextLine;
+    // ดึงชื่อผู้รับจากส่วน "ที่อยู่จัดส่ง"
+    let foundName = '';
+    if (shipStart >= 0) {
+        const endSearch = billStart > shipStart ? billStart : lines.length;
+        for (let i = shipStart + 1; i < endSearch; i++) {
+            if (lines[i].includes('ชื่อผู้รับ') && i + 1 < endSearch) {
+                const nextLine = lines[i + 1].trim();
+                if (nextLine.length > 0 && !nextLine.includes('เบอร์') && !nextLine.includes('ที่อยู่')) {
+                    foundName = nextLine;
+                    break;
+                }
+            }
+        }
+    }
+    order.customerName = foundName;
+
+    // ดึงที่อยู่จากส่วน "ที่อยู่จัดส่ง" (บรรทัดถัดจาก "รายละเอียดที่อยู่สำหรับจัดส่ง")
+    let foundAddress = '';
+    if (shipStart >= 0) {
+        const endSearch = billStart > shipStart ? billStart : lines.length;
+        for (let i = shipStart + 1; i < endSearch; i++) {
+            if (lines[i].includes('รายละเอียดที่อยู่สำหรับจัดส่ง') && i + 1 < endSearch) {
+                foundAddress = lines[i + 1].trim();
                 break;
             }
         }
     }
+    order.address = foundAddress;
 
-    // ดึงที่อยู่จัดส่ง (ไม่ใช่ที่อยู่เรียกเก็บเงิน)
-    // หาช่วงระหว่าง "ที่อยู่จัดส่ง" กับ "ที่อยู่เรียกเก็บเงิน"
-    let shippingStart = -1;
-    let billingStart = lines.length;
-    for (let i = 0; i < lines.length; i++) {
-        if (lines[i].includes('ที่อยู่จัดส่ง') || lines[i].includes('ที่อยู่ผู้ซื้อ')) {
-            shippingStart = i;
-        }
-        if (lines[i].includes('ที่อยู่เรียกเก็บเงิน')) {
-            billingStart = i;
-            break;
+    // ดึงเบอร์โทรจากส่วน "ที่อยู่จัดส่ง"
+    let foundPhone = '';
+    if (shipStart >= 0) {
+        const endSearch = billStart > shipStart ? billStart : lines.length;
+        for (let i = shipStart + 1; i < endSearch; i++) {
+            if (lines[i].includes('เบอร์ผู้รับ') && i + 1 < endSearch) {
+                foundPhone = lines[i + 1].trim();
+                break;
+            }
         }
     }
-    // ดึงที่อยู่จากช่วง ที่อยู่จัดส่ง (ก่อน ที่อยู่เรียกเก็บเงิน)
-    for (let i = shippingStart + 1; i < billingStart; i++) {
-        const line = lines[i].trim();
-        // หาบรรทัดที่มี ตำบล/อำเภอ/จังหวัด หรือ Thailand
-        if ((line.includes('ตำบล') || line.includes('อำเภอ') || line.includes('จังหวัด')) && line.length > 20) {
-            order.address = line;
-            break;
-        }
-        if (line.includes(', Thailand') && line.length > 30) {
-            order.address = line;
-            break;
-        }
-    }
-
-    // ดึงเบอร์โทร
-    const phoneMatch = text.match(/เบอร์ผู้รับ\s*[\n\r]+([^\n\r]+)/);
-    if (phoneMatch) order.username = phoneMatch[1].trim();
+    order.username = foundPhone;
 
     // ฟังก์ชันแปลงสี Lazada เป็นรหัส
     function convertLazadaColorCode(color) {
